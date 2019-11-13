@@ -1,0 +1,32 @@
+{
+  "author": {
+    "name": "raffaele.montella@uniparthenope.it"
+  },
+  "description": "Signal K server plugin to log data into DYNAMO cloud",
+  "dependencies": {
+    "baconjs": "^0.7.88",
+    "circular-buffer": "^1.0.2",
+    "concurrent-queue": "^7.0.2",
+    "gzip": "^0.1.0",
+    "mocha": "^3.5.0",
+    "request": "^2.88.0",
+    "uuid": "^3.3.2"
+  },
+  "directories": {},
+  "keywords": [
+    "signalk-node-server-plugin",
+    "signalk-webapp"
+  ],
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "maintainers": [
+    {
+      "name": "montella",
+      "email": "raffaele.montella@uniparthenope.it"
+    }
+  ],
+  "optionalDependencies": {},
+  "readme": "ERROR: No README data found!",
+  "name": "@signalk/signalk-dynamo-logger",
+  "version": "1.0.0"
+}
