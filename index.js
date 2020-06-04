@@ -11,12 +11,12 @@ const { spawn } = require('child_process')
 const crypto = require('crypto');
 const zlib = require('zlib');
 
-var constants = require("constants");
+let constants = require("constants");
 
 const uuidv1 = require('uuid/v1');
 const { Transform } = require('stream');
 
-var CircularBuffer = require("circular-buffer");
+let CircularBuffer = require("circular-buffer");
 
 
 /*
@@ -96,39 +96,39 @@ module.exports = function (app) {
     })
 
   // Define the plugin object and the list of the Signal K update the plugin subscribes to
-  var plugin = {
+  let plugin = {
     unsubscribes: []
   }
 
   // Signal K self identifier
-  var selfId = ""
+  let selfId = ""
 
   // Directory for logging (where the plugin stores the updates)
-  var logDir = ""
+  let logDir = ""
 
   // Directory for storage (where the plugin stores locally the log files)
-  var storageDir = ""
+  let storageDir = ""
 
   // Directory for files waiting for upload
-  var uploadDir = ""
+  let uploadDir = ""
 
   // The name of the log file
-  var logFileName = "data_log.json"
+  let logFileName = "data_log.json"
 
   // The log file is cut each seconds
-  var logRotationInterval = 300
+  let logRotationInterval = 300
 
   // The plugin trys to upload each seconds
-  var uploadInterval = 60
+  let uploadInterval = 60
 
   // Private key path
-  var privateKeyPath=""
+  let privateKeyPath=""
 
   // Public key path
-  var publicKeyPath=""
+  let publicKeyPath=""
 
   // Number of concurrently uploading threads
-  var threads = 2
+  let threads = 2
 
   // Get the file size in bytes
   function getFilesizeInBytes(filename) {
@@ -137,30 +137,30 @@ module.exports = function (app) {
     return fileSizeInBytes
   }
 
-  var uploadSpeedBuffer = new CircularBuffer(100);
+  let uploadSpeedBuffer = new CircularBuffer(100);
 
 
 
   // The upload queue
-  var uploadQueue = queue().limit({ concurrency: threads }).process(function (filePath, done) {
+  let uploadQueue = queue().limit({ concurrency: threads }).process(function (filePath, done) {
     console.log(`Uploading: ${filePath} -> ${uploadUrl}`)
 
-    var startTime = Date.now()
-    var req = request.post(uploadUrl+"/"+selfId, function (err, resp, body) {
+    let startTime = Date.now()
+    let req = request.post(uploadUrl+"/"+selfId, function (err, resp, body) {
       if (err) {
         console.log(`Error!:${err}`);
       } else {
         console.log('Body: [' + body+']');
 
-        var stopTime= Date.now()
-        var fileSize=getFilesizeInBytes(filePath)
+        let stopTime= Date.now()
+        let fileSize=getFilesizeInBytes(filePath)
         uploadSpeedBuffer.push(
           {"size":fileSize,"start":startTime,"stop":stopTime})
         // An array with the latest speed measurements
-        var uploadSpeedArray=uploadSpeedBuffer.toarray();
+        let uploadSpeedArray=uploadSpeedBuffer.toarray();
         console.log("uploadSpeedBuffer:"+util.inspect(uploadSpeedArray, {showHidden: false, depth: null}))
 
-        var t1=0
+        let t1=0
         uploadSpeedArray.forEach(item => {
           if (item["stop"]>t1) {
             t1=item["stop"]
@@ -168,8 +168,8 @@ module.exports = function (app) {
         })
 
 
-        var t0=t1-1000;
-        var speed=0
+        let t0=t1-1000;
+        let speed=0
         uploadSpeedArray.forEach(item => {
           if (item["start"]>=t0 && item["stop"]<=t1) {
             speed += parseFloat(item["size"]);
@@ -181,8 +181,8 @@ module.exports = function (app) {
       }
     });
 
-    var sessionId=uuidv1();
-    var form = req.form();
+    let sessionId=uuidv1();
+    let form = req.form();
     form.append('sessionId',sessionId)
     form.append('file', fs.createReadStream(filePath));
     done();
@@ -254,10 +254,10 @@ module.exports = function (app) {
   Generate a random password of given lenght
    */
   function generatePassword(length) {
-    var text = "";
-    var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let text = "";
+    let possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-    for (var i = 0; i < length; i++)
+    for (let i = 0; i < length; i++)
       text += possible.charAt(Math.floor(Math.random() * possible.length));
 
     return text;
@@ -278,7 +278,7 @@ module.exports = function (app) {
     // This function returns true if the file name passed as fileName ends with .log
     function hasLogExtension(fileName) {
       // Get the file extension
-      var fileExt = path.extname(fileName);
+      let fileExt = path.extname(fileName);
       // Return true if the extension is .loh
       return fileExt === '.log';
     };
@@ -317,19 +317,47 @@ module.exports = function (app) {
             // Handle the end event
             fs.readFile(logDir + "/" + logFile, 'utf8', function(err, data) {
 
+              /* Summary:
+              Definition:
+              Sender - the client application running on the vessel side
+              Receiver - the server application running on the cloud side
+
+              Key exchange:
+              At the setup time, the user registers the vessel on the DYNAMO web portal providing the automatically
+              generated vessel's UUID or the MMSI and the sender_priv_key using a secured channel (i.e. https server
+              portal or APIs). The receiver_pub_key is downloaded via https and stored locally.
+              This is done only one time, usually at home, on the boatyard or docked in a marina.
+
+
+
+              1. Read the parcel
+              2. Create a digital signature RSA-SHA256
+              3. Sign the parcel using the sender_priv_key, encode the signature in Base64
+              4. Set the signature as { "seflId":uuId, "signature": ..., "type":"RSA-SHA256" }
+              5. Generate a symmetric key
+              6. Encrypt the symmetric key with the receiver_pub_key (padding RSA_PKCS1_OAEP_PADDING)
+              7. Generate a 16 values random integer as initialization vector
+              8. Prepend the signature
+              9. Compress the parcel and the prepended signature
+              10.Encrypt the parcel using symmetric key (aes-256-cbc)
+              11.Append the init vector1
+              12.Prepend the Encrypted Symmetric Key
+
+               */
+
 
               // The signature
-              var sig=null
-              var type="RSA-SHA256"
+              let sig=null
+              let type="RSA-SHA256"
 
 
               try {
                 // Read the source private key
-                var srcPem = fs.readFileSync(privateKeyPath);
-                var srcKey = srcPem.toString('ascii');
+                let srcPem = fs.readFileSync(privateKeyPath);
+                let srcKey = srcPem.toString('ascii');
                 //console.log(srcKey)
                 // Create the signature object
-                var srcSign = crypto.createSign(type);
+                let srcSign = crypto.createSign(type);
 
                 // Encrypt using the srcKey
                 srcSign.update(data);
@@ -339,30 +367,30 @@ module.exports = function (app) {
                 type="none"
               }
 
-              // Generate a simmetric key
+              // Generate a symmetric key
               const symmetricKey= generatePassword(32)
               console.log("Symmeric Key:"+symmetricKey)
 
               // Read the destination public key
-              var dstPem = fs.readFileSync(publicKeyPath);
-              var dstKey = dstPem.toString('ascii');
+              let dstPem = fs.readFileSync(publicKeyPath);
+              let dstKey = dstPem.toString('ascii');
               //console.log(dstKey)
-              var buffer = Buffer.from(symmetricKey);
+              let buffer = Buffer.from(symmetricKey);
 
-              var encrypted = crypto.publicEncrypt(
+              let encrypted = crypto.publicEncrypt(
                 { "key" : dstKey,
                   "padding" : constants.RSA_PKCS1_OAEP_PADDING
                 },
                 buffer);
 
-              var encryptedSymmetricKey=encrypted.toString("base64");
+              let encryptedSymmetricKey=encrypted.toString("base64");
               console.log("encryptedSymmetricKey:"+encryptedSymmetricKey)
 
 
               const prependEncryptedSymmetricKey = new PrependedEncryptedSymmetricKey(encryptedSymmetricKey);
 
               // Read the signature
-              var signature = { "selfId":selfId,"signature":sig,"type":type }
+              let signature = { "selfId":selfId,"signature":sig,"type":type }
               const prependSignature = new PrependSignature(signature);
 
               console.log("signature:" + JSON.stringify(signature))
@@ -381,7 +409,7 @@ module.exports = function (app) {
               // Generate a cipher key from the sharedSecret.
               const cipherKey = crypto.createHash('sha256').update(symmetricKey).digest()
 
-              // for symmetrick encryption
+              // for symmetric encryption
               //aes256
               const cipher = crypto.createCipheriv('aes-256-cbc', cipherKey, iv);
               const appendInitVect = new AppendInitVect(iv);
@@ -400,7 +428,7 @@ module.exports = function (app) {
                 // Prepend signature JSON
                 .pipe(prependSignature)
 
-                // GZio the file
+                // GZip the file
                 .pipe(gzip)
 
                 // Encrypt the file
@@ -409,7 +437,7 @@ module.exports = function (app) {
                 // Append the init vector
                 .pipe(appendInitVect)
 
-                // Prepend the Encrypted Symmertrick Key
+                // Prepend the Encrypted Symmetric Key
                 .pipe(prependEncryptedSymmetricKey)
 
                 // Finally write the stream
@@ -439,7 +467,7 @@ module.exports = function (app) {
     function hasEncExtension (fileName) {
 
       // Get the file extension
-      var fileExt = path.extname(fileName);
+      let fileExt = path.extname(fileName);
 
       // Return true if the file extension is .enc
       return fileExt === '.enc';
