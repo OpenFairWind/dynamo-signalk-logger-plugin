@@ -130,6 +130,9 @@ module.exports = function (app) {
   // Number of concurrently uploading threads
   let threads = 2
 
+  // Latest speed in byte per second
+  let latestSpeed = 0
+
   // Get the file size in bytes
   function getFilesizeInBytes(filename) {
     const stats = fs.statSync(filename)
@@ -154,28 +157,12 @@ module.exports = function (app) {
 
         let stopTime= Date.now()
         let fileSize=getFilesizeInBytes(filePath)
+        let speed = fileSize/((stopTime-startTime)/1000)
         uploadSpeedBuffer.push(
-          {"size":fileSize,"start":startTime,"stop":stopTime})
-        // An array with the latest speed measurements
-        let uploadSpeedArray=uploadSpeedBuffer.toarray();
-        console.log("uploadSpeedBuffer:"+util.inspect(uploadSpeedArray, {showHidden: false, depth: null}))
+          {"size":fileSize,"start":startTime,"stop":stopTime, "threads": threads, "speed": speed})
 
-        let t1=0
-        uploadSpeedArray.forEach(item => {
-          if (item["stop"]>t1) {
-            t1=item["stop"]
-          }
-        })
-
-
-        let t0=t1-1000;
-        let speed=0
-        uploadSpeedArray.forEach(item => {
-          if (item["start"]>=t0 && item["stop"]<=t1) {
-            speed += parseFloat(item["size"]);
-          }
-        })
-        console.log("Speed: "+speed+" b/s")
+        latestSpeed = speed
+        console.log("Speed: "+latestSpeed+" b/s")
 
         fs.unlinkSync(filePath);
       }
@@ -620,7 +607,7 @@ module.exports = function (app) {
         }
 
         // Set an empty path
-        let path = [];
+        let signakPath = [];
 
         // Set an empty dictionary for the root properties
         let rootProperties = {};
@@ -632,7 +619,7 @@ module.exports = function (app) {
           for (let key in obj) {
 
             // Add the key to the path
-            path.push(key)
+            signakPath.push(key)
 
             // Check if the object is an object, if the key is not null,
             // and if the key is not "value"
@@ -643,7 +630,7 @@ module.exports = function (app) {
 
             } else {
               // Create the path sting from all path elements except the last
-              let pathString = path.slice(0, -1).join('.')
+              let pathString = signakPath.slice(0, -1).join('.')
 
               // Check if the current key is "value"
               if (key === "value") {
@@ -669,7 +656,7 @@ module.exports = function (app) {
             }
 
             // Remove the last path element
-            path.pop()
+            signakPath.pop()
           }
         }
 
@@ -696,16 +683,85 @@ module.exports = function (app) {
 
   /* Register the REST API */
   plugin.registerWithRouter = function(router) {
-    console.log("registerWithRouter")
 
-    // Return the logging status
-    router.get("/status", (req, res) => {
-      console.log("get.command: " + util.inspect(req.body))
-      debug("command: " + util.inspect(req.body))
-      console.log("get.command.done")
+    // Return the logging speed
+    router.get("/info", (req, res) => {
+      app.debug("get info")
+
+      let result = {
+        "threads": threads,
+        "speed": {
+          "buffer": uploadSpeedBuffer.toarray(),
+          "latest": latestSpeed
+        }
+      }
+
+      res.status(200)
+      res.send(result)
     })
 
-    console.log("/registerWithRouter")
+    // Return the logs
+    router.get("/logs", (req, res) => {
+      app.debug("get logs")
+
+      let logs = []
+
+      fs.readdirSync(logDir).forEach(file => {
+        let stats = fs.statSync(path.join(logDir,file))
+
+        let item = {
+          "name": file,
+          "size": stats.size,
+          "date": new Date(stats.birthtime)
+        }
+        logs.push(item)
+      });
+
+      res.status(200)
+      res.send(logs)
+    })
+
+    // Return the uploads
+    router.get("/uploads", (req, res) => {
+      app.debug("get uploads")
+
+      let uploads = []
+
+      fs.readdirSync(uploadDir).forEach(file => {
+        let stats = fs.statSync(path.join(uploadDir,file))
+
+        let item = {
+          "name": file,
+          "size": stats.size,
+          "date": new Date(stats.birthtime)
+        }
+        uploads.push(item)
+      });
+
+      res.status(200)
+      res.send(uploads)
+    })
+
+    // Return the storage
+    router.get("/storage", (req, res) => {
+      app.debug("get storage")
+
+      let storage = []
+
+      fs.readdirSync(storageDir).forEach(file => {
+        let stats = fs.statSync(path.join(storageDir,file))
+
+        let item = {
+          "name": file,
+          "size": stats.size,
+          "date": new Date(stats.birthtime)
+        }
+        storage.push(item)
+      });
+
+      res.status(200)
+      res.send(storage)
+    })
   }
 
   /*
@@ -723,7 +779,7 @@ module.exports = function (app) {
     plugin.unsubscribes.forEach(f => f())
 
     // Empty the subscribers list
-    unsubscribes = []
+    plugin.unsubscribes = []
   }
 
   // Reryrb the plugub object
