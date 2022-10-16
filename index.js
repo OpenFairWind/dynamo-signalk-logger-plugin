@@ -4,7 +4,10 @@ const util = require("util");
 const _ = require('lodash')
 const path = require('path')
 const fs = require('fs')
+
+// https://www.npmjs.com/package/concurrent-queue
 const queue = require('concurrent-queue');
+
 const request = require('request');
 const { spawn } = require('child_process')
 
@@ -100,6 +103,9 @@ module.exports = function (app) {
     unsubscribes: []
   }
 
+  // Upload status
+  let uploadStatus = "undefined"
+
   // Signal K self identifier
   let selfId = ""
 
@@ -152,6 +158,7 @@ module.exports = function (app) {
     let req = request.post(uploadUrl+"/"+selfId, function (err, resp, body) {
       if (err) {
         console.log(`Error!:${err}`);
+        uploadStatus = { "text": "error", "error": err }
       } else {
         console.log('Body: [' + body+']');
 
@@ -159,12 +166,13 @@ module.exports = function (app) {
         let fileSize=getFilesizeInBytes(filePath)
         let speed = fileSize/((stopTime-startTime)/1000)
         uploadSpeedBuffer.push(
-          {"size":fileSize,"start":startTime,"stop":stopTime, "threads": threads, "speed": speed})
+          {"size":fileSize,"start":startTime,"stop":stopTime, "threads": uploadQueue.concurrency, "speed": speed})
 
         latestSpeed = speed
         console.log("Speed: "+latestSpeed+" b/s")
 
         fs.unlinkSync(filePath);
+        uploadStatus = { "text": "ok"}
       }
     });
 
@@ -178,7 +186,7 @@ module.exports = function (app) {
   // The plugin unique id
   plugin.id = 'signalk-dynamo-logger'
 
-  // The plugin human readable name
+  // The plugin human-readable name
   plugin.name = 'SignalK DYNAMO Logger'
 
   // The plugin description
@@ -233,9 +241,6 @@ module.exports = function (app) {
       }
     }
   }
-
-  // Number of concurrent request theads
-  plugin.threads=8
 
   /*
   Generate a random password of given lenght
@@ -689,10 +694,16 @@ module.exports = function (app) {
       app.debug("get info")
 
       let result = {
-        "threads": threads,
+        "status": uploadStatus,
         "speed": {
           "buffer": uploadSpeedBuffer.toarray(),
           "latest": latestSpeed
+        },
+        "queue": {
+          "size": uploadQueue.maxSize,
+          "concurrency": uploadQueue.concurrency,
+          "pending": uploadQueue.pending.length,
+          "processing": uploadQueue.processing.length
         }
       }
 
