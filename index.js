@@ -395,7 +395,7 @@ module.exports = function (app) {
 
               console.log("signature:" + JSON.stringify(signature))
 
-              // Create a write stream with a different file extension
+              // Create write stream with a different file extension
               const writeStream = fs.createWriteStream(uploadDir + "/" + logFile + ".gz.enc");
 
               // Create the gzip object
@@ -490,7 +490,7 @@ module.exports = function (app) {
 
 
 
-  // Appen the delta to the current log file
+  // Append the delta to the current log file
   function writeDelta(delta) {
     // Append to the file
     fs.appendFile(
@@ -541,6 +541,8 @@ module.exports = function (app) {
 
       // Read interval settings
       logRotationInterval = options["interval"]
+
+      // Read the upload interval
       uploadInterval = options["uploadinterval"]
 
       // Read the upload URL
@@ -556,15 +558,17 @@ module.exports = function (app) {
       // create a new logfile
       rotateLogFile(new Date())
 
-      // Try to upload
-      //tryUpload()
+      // Dump the full document as delta
+      writeDelta(makeFullDelta())
 
-
-      // Set a timer each logRotationInterval seconds invoching the rotateLogFile function
+      // Set a timer each logRotationInterval seconds invoking the rotateLogFile function
       setInterval(() => {
 
           // Rotate the log file
           rotateLogFile(new Date())
+
+          // Dump the full document as delta
+          writeDelta(makeFullDelta())
         },
         logRotationInterval * 1000
       )
@@ -593,6 +597,98 @@ module.exports = function (app) {
           console.error(err)
         }
       })
+
+      // Create an update form the full document
+      function makeFullDelta() {
+
+        // Set the context
+        const context = "vessels." + app.selfId
+
+        // Get the whole document
+        let doc = app.getPath(context)
+
+        // Initialize the result
+        let delta = {
+          "updates": [
+            {
+              "timestamp": new Date(),
+              "values": [],
+              "$source": "defaults"
+            }
+          ],
+          "context": context
+        }
+
+        // Set an empty path
+        let path = [];
+
+        // Set an empty dictionary for the root properties
+        let rootProperties = {};
+
+        // Recursive function for document visiting
+        function eachRecursive(obj) {
+
+          // For each key in the object
+          for (let key in obj) {
+
+            // Add the key to the path
+            path.push(key)
+
+            // Check if the object is an object, if the key is not null,
+            // and if the key is not "value"
+            if (typeof obj[key] == "object" && obj[key] !== null && key !== "value") {
+
+              // Invoke the same function recursively
+              eachRecursive(obj[key]);
+
+            } else {
+              // Create the path sting from all path elements except the last
+              let pathString = path.slice(0, -1).join('.')
+
+              // Check if the current key is "value"
+              if (key === "value") {
+
+                // Prepare a full path to get the value
+                let fullPathString = context + "." + pathString + ".value"
+
+                // Set the value object
+                let value = {
+                  "path": pathString,
+                  "value": app.getPath(fullPathString)
+                }
+
+                // Add the value to the updates' values
+                delta.updates[0].values.push(value)
+
+              } else
+                // Check if the path string is empty
+                if (pathString === "") {
+                  // Add the document root property to the rootProperties dictionary
+                  rootProperties[key] = obj[key]
+              }
+            }
+
+            // Remove the last path element
+            path.pop()
+          }
+        }
+
+        // Invoke the recursive function
+        eachRecursive(doc)
+
+        // Set the value object for the root properties
+        let value = {
+          "path": "",
+          "value": rootProperties
+        }
+
+        // Add the root properties to the delta
+        delta.updates[0].values.push(value)
+
+        // Return the delta
+        return delta
+      }
+
     } else {
       console.log("The DYNAMO Logger is not correcly configured:\n"+JSON.stringify(options))
     }
