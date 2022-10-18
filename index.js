@@ -139,11 +139,13 @@ module.exports = function (app) {
   // Latest speed in byte per second
   let latestSpeed = 0
 
+  // Latest time of speed measurement
+  let latestTime
+
   // Get the file size in bytes
   function getFilesizeInBytes(filename) {
     const stats = fs.statSync(filename)
-    const fileSizeInBytes = stats.size
-    return fileSizeInBytes
+    return stats.size
   }
 
   let uploadSpeedBuffer = new CircularBuffer(100);
@@ -169,7 +171,8 @@ module.exports = function (app) {
           {"size":fileSize,"start":startTime,"stop":stopTime, "threads": uploadQueue.concurrency, "speed": speed})
 
         latestSpeed = speed
-        console.log("Speed: "+latestSpeed+" b/s")
+        latestTime = stopTime
+        console.log("Speed: "+latestSpeed+" b/s at "+ new Date(latestTime))
 
         fs.unlinkSync(filePath);
         uploadStatus = { "text": "ok"}
@@ -603,7 +606,7 @@ module.exports = function (app) {
         let delta = {
           "updates": [
             {
-              "timestamp": new Date(),
+              "timestamp": Date.now(),
               "values": [],
               "$source": "defaults"
             }
@@ -694,6 +697,7 @@ module.exports = function (app) {
       app.debug("get info")
 
       let result = {
+        "timeref": latestTime,
         "status": uploadStatus,
         "speed": {
           "buffer": uploadSpeedBuffer.toarray(),
