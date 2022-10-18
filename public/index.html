@@ -1,7 +1,111 @@
 <html>
   <head>
+    <script src="js/jquery/dist/jquery-3.6.1.min.js"></script>
+    <script src="js/chartjs/dist/chart.min.js"></script>
+    <script src="js/luxon/dist/luxon.min.js"></script>
+    <script src="js/chartjs-adapter-luxon/dist/chartjs-adapter-luxon.min.js"></script>
+    <script src="js/chartjs-plugin-streaming/dist/chartjs-plugin-streaming.min.js"></script>
   </head>
   <body>
-Here a PWA GUI
+  <canvas id="myChart"></canvas>
+  <script>
+    const ctx = document.getElementById('myChart').getContext('2d');
+
+    const config = {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: 'Speed (MB)',
+            backgroundColor: 'rgba(255, 99, 132, 0.5)',
+            borderColor: 'rgb(255, 99, 132)',
+            fill: false,
+            data: [],
+            yAxisID: 'y',
+          },
+          {
+            label: 'Concurrent Threads (n)',
+            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+            borderColor: 'rgb(54, 162, 235)',
+            fill: true,
+            data: [],
+            yAxisID: 'y1',
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        stacked: false,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Dynamo Logger Performance'
+          }
+        },
+        scales: {
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            min: 0
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            min: 1,
+            max: 16,
+
+            // grid line settings
+            grid: {
+              drawOnChartArea: false, // only want the grid lines for one axis to show up
+            },
+          },
+          x: {
+            type: 'realtime',
+            realtime: {
+              delay: 2000,
+              onRefresh: chart => {
+
+                $.ajax({
+                  url: '/plugins/signalk-dynamo-logger/info',
+                  success: function (data) {
+                    console.log(data["speed"]["latest"] + " " + data["queue"]["concurrency"])
+                    chart.data.datasets.forEach(function (dataset,idx) {
+                      switch (idx) {
+                        case 0:
+                          dataset.data.push({
+                            x: Date.now(),
+                            y: (data["speed"]["latest"])/1000000
+                          });
+                          break
+                        case 1:
+                          dataset.data.push({
+                            x: Date.now(),
+                            y: data["queue"]["concurrency"]
+                          });
+                          break
+                      }
+
+                    });
+                  }
+                })
+              }
+            }
+          }
+        }
+      }
+    };
+
+    const myChart = new Chart(
+            document.getElementById('myChart'),
+            config
+    );
+  </script>
+
   </body>
 </html>
