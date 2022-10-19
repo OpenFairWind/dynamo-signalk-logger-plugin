@@ -134,7 +134,7 @@ module.exports = function (app) {
   let publicKeyPath=""
 
   // Number of concurrently uploading threads
-  let threads = 2
+  let threads = 1
 
   // Latest speed in byte per second
   let latestSpeed = 0
@@ -149,8 +149,9 @@ module.exports = function (app) {
   }
 
   let uploadSpeedBuffer = new CircularBuffer(100);
-
-
+  for (let i=0; i<100; i++) {
+    uploadSpeedBuffer.push({"size": 0, "start": 0, "stop": 0, "threads": 0, "speed": 0})
+  }
 
   // The upload queue
   let uploadQueue = queue().limit({ concurrency: threads }).process(function (filePath, done) {
@@ -214,7 +215,7 @@ module.exports = function (app) {
       },
       storagedir: {
         type: 'string',
-        title: 'Storage directory',
+        title: 'Storage directory.',
         default: ''
       },
       uploaddir: {
@@ -278,7 +279,7 @@ module.exports = function (app) {
       return fileExt === '.log';
     };
 
-    // Read the directory log dir invoking the function function when finished
+    // Read the directory log dir invoking the function when finished
     // fileList is a list with all directory entries
     fs.readdir(logDir, function(err, fileList) {
 
@@ -305,7 +306,6 @@ module.exports = function (app) {
 
             // Sign the data
 
-
             // Create a read stream
             const hashReadStream = fs.createReadStream(logDir + "/" + logFile);
 
@@ -322,8 +322,6 @@ module.exports = function (app) {
               generated vessel's UUID or the MMSI and the sender_priv_key using a secured channel (i.e. https server
               portal or APIs). The receiver_pub_key is downloaded via https and stored locally.
               This is done only one time, usually at home, on the boatyard or docked in a marina.
-
-
 
               1. Read the parcel
               2. Create a digital signature RSA-SHA256
@@ -482,9 +480,6 @@ module.exports = function (app) {
     })
   }
 
-
-
-
   // Append the delta to the current log file
   function writeDelta(delta) {
     // Append to the file
@@ -606,11 +601,12 @@ module.exports = function (app) {
         let delta = {
           "updates": [
             {
-              "timestamp": Date.now(),
+              "timestamp": new Date(),
               "values": [],
               "$source": "defaults"
             }
           ],
+          "source": { "label" :"signalk-dynamo-logger", "type": "signalk-dynamo-logger"},
           "context": context
         }
 
@@ -680,6 +676,9 @@ module.exports = function (app) {
         // Add the root properties to the delta
         delta.updates[0].values.push(value)
 
+        console.log("Full Delta:")
+        console.log(JSON.stringify(delta))
+
         // Return the delta
         return delta
       }
@@ -704,9 +703,9 @@ module.exports = function (app) {
           "latest": latestSpeed
         },
         "queue": {
-          "size": uploadQueue.maxSize,
           "concurrency": uploadQueue.concurrency,
           "pending": uploadQueue.pending.length,
+          "upload": fs.readdirSync(uploadDir).length,
           "processing": uploadQueue.processing.length
         }
       }
