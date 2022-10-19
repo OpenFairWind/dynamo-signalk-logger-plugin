@@ -46,6 +46,14 @@
             fill: true,
             data: [],
             yAxisID: 'y1',
+          },
+          {
+            label: 'Log size (MB)',
+            backgroundColor: 'rgba(235,129,54,0.5)',
+            borderColor: 'rgb(253,153,12)',
+            fill: true,
+            data: [],
+            yAxisID: 'y2',
           }
         ]
       },
@@ -74,12 +82,13 @@
             display: true,
             position: 'right',
             min: 1,
-            max: 16,
-
-            // grid line settings
-            grid: {
-              drawOnChartArea: false, // only want the grid lines for one axis to show up
-            },
+            max: 16
+          },
+          y2: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            min: 0
           },
           x: {
             type: 'realtime',
@@ -122,6 +131,12 @@
                           dataset.data.push({
                             x: Date.now(),
                             y: data["queue"]["concurrency"]
+                          });
+                          break
+                        case 2:
+                          dataset.data.push({
+                            x: Date.now(),
+                            y: data["logfile"]["size"]/1000000
                           });
                           break
                       }

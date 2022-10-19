@@ -707,6 +707,10 @@ module.exports = function (app) {
           "pending": uploadQueue.pending.length,
           "upload": fs.readdirSync(uploadDir).length,
           "processing": uploadQueue.processing.length
+        },
+        "logfile": {
+          "name": logFileName,
+          "size": fs.statSync(path.join(logDir, logFileName)).size
         }
       }
 
