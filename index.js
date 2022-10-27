@@ -158,7 +158,7 @@ module.exports = function (app) {
     console.log(`Uploading: ${filePath} -> ${uploadUrl}`)
 
     let startTime = Date.now()
-    let req = request.post(uploadUrl+"/"+selfId, function (err, resp, body) {
+    let req = request.post(uploadUrl+"/vessels."+selfId, function (err, resp, body) {
       if (err) {
         console.log(`Error!:${err}`);
         uploadStatus = { "text": "error", "error": err }
@@ -564,7 +564,7 @@ module.exports = function (app) {
       )
 
 
-      // Check if the uploadInterval is greter than zero
+      // Check if the uploadInterval is greater than zero
       if (uploadInterval > 0) {
         // Set a timer each uploadInterval seconds invoking the tryUpload function
         setInterval(() => {
