@@ -188,7 +188,7 @@ module.exports = function (app) {
   })
 
   // The plugin unique id
-  plugin.id = 'signalk-dynamo-logger'
+  plugin.id = 'dynamo-signalk-logger-plugin'
 
   // The plugin human-readable name
   plugin.name = 'SignalK DYNAMO Logger'
