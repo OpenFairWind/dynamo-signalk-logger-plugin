@@ -14,6 +14,7 @@
   },
   "directories": {},
   "keywords": [
+    "signalk-category-cloud",
     "signalk-node-server-plugin",
     "signalk-webapp"
   ],
@@ -26,7 +27,7 @@
     }
   ],
   "optionalDependencies": {},
-  "readme": "ERROR: No README data found!",
-  "name": "@signalk/signalk-dynamo-logger",
+  "readme": "README.md",
+  "name": "dynamo-signalk-logger-plugin",
   "version": "1.0.0"
 }
