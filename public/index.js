@@ -72,7 +72,7 @@ const config1 = {
                     onRefresh: chart => {
 
                         $.ajax({
-                            url: '/plugins/signalk-dynamo-logger/info',
+                            url: '/plugins/dynamo-signalk-logger-plugin/info',
                             success: function (data) {
 
                                 for (let i = 0; i<100; i++) {
