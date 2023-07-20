@@ -1,7 +1,7 @@
 const Bacon = require("baconjs");
-const debug = require("debug")("signalk:signalk-data-logger");
+const debug = require("debug")("signalk:dynamo-signalk-logger-plugin");
 const util = require("util");
-const _ = require('lodash')
+
 const path = require('path')
 const fs = require('fs')
 
@@ -109,6 +109,9 @@ module.exports = function (app) {
   // Signal K self identifier
   let selfId = ""
 
+  // The server url
+  let serverUrl = ""
+
   // Directory for logging (where the plugin stores the updates)
   let logDir = ""
 
@@ -155,10 +158,10 @@ module.exports = function (app) {
 
   // The upload queue
   let uploadQueue = queue().limit({ concurrency: threads }).process(function (filePath, done) {
-    console.log(`Uploading: ${filePath} -> ${uploadUrl}`)
+    console.log(`Uploading: ${filePath} -> ${serverUrl}/upload`)
 
     let startTime = Date.now()
-    let req = request.post(uploadUrl+"/vessels."+selfId, function (err, resp, body) {
+    let req = request.post(serverUrl+"/upload/vessels."+selfId, function (err, resp, body) {
       if (err) {
         console.log(`Error!:${err}`);
         uploadStatus = { "text": "error", "error": err }
@@ -203,22 +206,22 @@ module.exports = function (app) {
     title: "DYNAMO Logger",
     description: "Log Signal K data as delta objects into DYNAMO cloud.",
     properties: {
-      uploadurl: {
+      serverUrl: {
         type: 'string',
-        title: 'Upload URL',
-        default: 'http://localhost:5000/upload'
+        title: 'Server URL',
+        default: 'http://localhost:5000'
       },
-      logdir: {
+      logDir: {
         type: 'string',
         title: 'Data log file directory',
         default: ''
       },
-      storagedir: {
+      storageDir: {
         type: 'string',
         title: 'Storage directory.',
         default: ''
       },
-      uploaddir: {
+      uploadDir: {
         type: 'string',
         title: 'Upload directory',
         default: ''
@@ -228,17 +231,17 @@ module.exports = function (app) {
         title: 'Log rotation interval (in seconds). Value of zero disables log rotation.',
         default: 300
       },
-      uploadinterval: {
+      uploadInterval: {
         type: 'number',
         title: 'Upload interval (in seconds). Value of zero disables upload.',
         default: 60
       },
-      privatekeypath: {
+      privateKeyPath: {
         type: 'string',
         title: 'Private key path (this device).',
         default: ''
       },
-      publickeypath: {
+      publicKeyPath: {
         type: 'string',
         title: 'Public key path (the DYNAMO Storage server).',
         default: ''
@@ -295,10 +298,10 @@ module.exports = function (app) {
           // Create the gzip object
           const gzip = zlib.createGzip();
 
-          // Create the write stream
+          // Create the write-stream
           const writeStream = fs.createWriteStream(storageDir + "/" + logFile + ".gz");
 
-          // Create the read stream
+          // Create the read-stream
           const readStream = fs.createReadStream(logDir + "/" + logFile);
 
           // Handle the end event
@@ -501,23 +504,23 @@ module.exports = function (app) {
   */
   plugin.start = function (options) {
     if (
-      // Check if the logdir is not empty and exists on the file system
-      options["logdir"] !== "" && fs.existsSync(options["logdir"]) &&
+      // Check if the logDir is not empty and exists on the file system
+      options["logDir"] !== "" && fs.existsSync(options["logDir"]) &&
 
       // Check if the storageDir is not empty and exists on the file system
-      options["storagedir"] !== "" && fs.existsSync(options["storagedir"]) &&
+      options["storageDir"] !== "" && fs.existsSync(options["storageDir"]) &&
 
       // Check if the uploadDir is not empty and exists on the file system
-      options["uploaddir"] !== "" && fs.existsSync(options["uploaddir"]) &&
+      options["uploadDir"] !== "" && fs.existsSync(options["uploadDir"]) &&
 
       // Check if the interval is not empty and if it is greater than zero
       options["interval"] !== "" && options["interval"]>0 &&
 
-      // Check if the uploadinterval is not empty and if it is greater or equal than zero
-      options["uploadinterval"] !== "" && options["uploadinterval"]>=0 &&
+      // Check if the uploadInterval is not empty and if it is greater or equal than zero
+      options["uploadInterval"] !== "" && options["uploadInterval"]>=0 &&
 
-      // Check if the uploadurl is not empty
-      options["uploadurl"] !== ""
+      // Check if the serverUrl is not empty
+      options["serverUrl"] !== ""
 
     ) {
 
@@ -525,24 +528,24 @@ module.exports = function (app) {
       selfId=app.selfId
 
       // Read directory settings
-      logDir = options["logdir"]
-      storageDir = options["storagedir"]
-      uploadDir = options["uploaddir"]
+      logDir = options["logDir"]
+      storageDir = options["storageDir"]
+      uploadDir = options["uploadDir"]
 
       // Read interval settings
       logRotationInterval = options["interval"]
 
       // Read the upload interval
-      uploadInterval = options["uploadinterval"]
+      uploadInterval = options["uploadInterval"]
 
       // Read the upload URL
-      uploadUrl=options["uploadurl"]
+      serverUrl=options["serverUrl"]
 
       // Read the private key path
-      privateKeyPath=options["privatekeypath"]
+      privateKeyPath=options["privateKeyPath"]
 
       // Read the public key path
-      publicKeyPath=options["publickeypath"]
+      publicKeyPath=options["publicKeyPath"]
 
 
       // create a new logfile
@@ -606,7 +609,7 @@ module.exports = function (app) {
               "$source": "defaults"
             }
           ],
-          "source": { "label" :"signalk-dynamo-logger", "type": "signalk-dynamo-logger"},
+          "source": { "label" :"dynamo-signalk-logger-plugin", "type": "dynamo-signalk-logger-plugin"},
           "context": context
         }
 
@@ -783,7 +786,7 @@ module.exports = function (app) {
   }
 
   /*
-  Define the stop function (invoked by the framework when the plugin havto to be stopped)
+  Define the stop function (invoked by the framework when the plugin have to be stopped)
   */
   plugin.stop = function () {
 
