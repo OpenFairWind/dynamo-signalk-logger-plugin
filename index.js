@@ -2,8 +2,10 @@ const Bacon = require("baconjs");
 const debug = require("debug")("signalk:dynamo-signalk-logger-plugin");
 const util = require("util");
 
+const http = require('http')
 const path = require('path')
 const fs = require('fs')
+const os = require("os");
 
 // https://www.npmjs.com/package/concurrent-queue
 const queue = require('concurrent-queue');
@@ -28,6 +30,67 @@ let CircularBuffer = require("circular-buffer");
 */
 module.exports = function (app) {
 
+  // Define the plugin object and the list of the Signal K update the plugin subscribes to
+  let plugin = {
+    // The plugin unique id
+    id: 'dynamo-signalk-logger-plugin',
+
+    // The plugin human-readable name
+    name: 'SignalK DYNAMO Logger',
+
+    // The plugin description
+    description: 'Plugin that logs data on DYNAMO cloud',
+
+    // Subscribes
+    unsubscribes: []
+  }
+
+
+
+  // check the available memory
+  const pluginDir = os.homedir() + "/.signalk/plugin-config-data/"+plugin.id;
+
+  // Check if the pluginDir exists
+  if (!fs.existsSync(pluginDir)) {
+    // Create the pluginDir
+    fs.mkdirSync(pluginDir, { recursive: true });
+  }
+
+  const baseKeyFilename = pluginDir + "/vessels." + app.selfId
+
+  // Check if the privateKeyFilename exists
+  if (!fs.existsSync(baseKeyFilename + ".pem")) {
+
+    // Calling generateKeyPair() method
+// with its parameters
+    crypto.generateKeyPair('rsa', {
+      modulusLength: 2048,    // options
+      publicExponent: 0x10101,
+      publicKeyEncoding: {
+        type: 'pkcs1',
+        format: 'pem'
+      },
+      privateKeyEncoding: {
+        type: 'pkcs8',
+        format: 'pem'
+      }
+    }, (err, publicKey, privateKey) => { // Callback function
+      if(!err)
+      {
+        // Write the private key
+        fs.writeFileSync(baseKeyFilename + ".pem", privateKey);
+
+        // Write the public key
+        fs.writeFileSync(baseKeyFilename + "-public.pem", publicKey);
+      }
+      else
+      {
+        // Prints error
+        console.log("Errr is: ", err);
+      }
+
+    });
+  }
 
 
   //  This class is needed for encryption
@@ -98,10 +161,7 @@ module.exports = function (app) {
       console.log(msg)
     })
 
-  // Define the plugin object and the list of the Signal K update the plugin subscribes to
-  let plugin = {
-    unsubscribes: []
-  }
+
 
   // Upload status
   let uploadStatus = "undefined"
@@ -134,7 +194,7 @@ module.exports = function (app) {
   let privateKeyPath=""
 
   // Public key path
-  let publicKeyPath=""
+  let serverPublicKeyPath=""
 
   // Number of concurrently uploading threads
   let threads = 1
@@ -190,15 +250,7 @@ module.exports = function (app) {
     done();
   })
 
-  // The plugin unique id
-  plugin.id = 'dynamo-signalk-logger-plugin'
 
-  // The plugin human-readable name
-  plugin.name = 'SignalK DYNAMO Logger'
-
-  // The plugin description
-  plugin.description =
-    'Plugin that logs data on DYNAMO cloud'
 
   // The plugin schema representing metadata and settings
   plugin.schema = {
@@ -211,20 +263,30 @@ module.exports = function (app) {
         title: 'Server URL',
         default: 'http://localhost:5000'
       },
+      serverLogin: {
+        type: 'string',
+        title: 'Server Login',
+        default: ''
+      },
+      serverPass: {
+        type: 'string',
+        title: 'Server Password',
+        default: ''
+      },
       logDir: {
         type: 'string',
         title: 'Data log file directory',
-        default: ''
+        default: pluginDir+"/log"
       },
       storageDir: {
         type: 'string',
         title: 'Storage directory.',
-        default: ''
+        default: pluginDir+"/storage"
       },
       uploadDir: {
         type: 'string',
         title: 'Upload directory',
-        default: ''
+        default: pluginDir+"/upload"
       },
       interval: {
         type: 'number',
@@ -239,11 +301,11 @@ module.exports = function (app) {
       privateKeyPath: {
         type: 'string',
         title: 'Private key path (this device).',
-        default: ''
+        default: baseKeyFilename + ".pem"
       },
-      publicKeyPath: {
+      serverPublicKeyPath: {
         type: 'string',
-        title: 'Public key path (the DYNAMO Storage server).',
+        title: 'Server public key path.',
         default: ''
       }
     }
@@ -368,7 +430,7 @@ module.exports = function (app) {
               console.log("Symmeric Key:"+symmetricKey)
 
               // Read the destination public key
-              let dstPem = fs.readFileSync(publicKeyPath);
+              let dstPem = fs.readFileSync(serverPublicKeyPath);
               let dstKey = dstPem.toString('ascii');
               //console.log(dstKey)
               let buffer = Buffer.from(symmetricKey);
@@ -503,6 +565,42 @@ module.exports = function (app) {
   options - passed by the framework, has the properties defined in plugin.schema.properties
   */
   plugin.start = function (options) {
+
+    // Check if the logDir is defined, but the directory doesn't exist
+    if (options["logDir"] !== "" && !fs.existsSync(options["logDir"])) {
+      fs.mkdirSync(options["logDir"], { recursive: true });
+    }
+
+    // Check if the logDir is defined, but the directory doesn't exist
+    if (options["storageDir"] !== "" && !fs.existsSync(options["storageDir"])) {
+      fs.mkdirSync(options["storageDir"], { recursive: true });
+    }
+
+    // Check if the logDir is defined, but the directory doesn't exist
+    if (options["uploadDir"] !== "" && !fs.existsSync(options["uploadDir"])) {
+      fs.mkdirSync(options["uploadDir"], { recursive: true });
+    }
+
+    // Check if the server public key is available
+    if (options["serverUrl"] !== "" && options["serverPublicKeyPath"] === "") {
+      // Download the server public key
+
+      const url = options["serverUrl"]+"/publickey"
+      const filename = pluginDir + "/server-public.pem";
+
+      http.get(url, (res) => {
+        const fileStream = fs.createWriteStream(filename);
+        res.pipe(fileStream);
+
+        fileStream.on('finish', () => {
+          fileStream.close();
+          console.log('Download finished')
+          options["serverPublicKeyPath"] = filename
+        });
+      })
+
+    }
+
     if (
       // Check if the logDir is not empty and exists on the file system
       options["logDir"] !== "" && fs.existsSync(options["logDir"]) &&
@@ -545,7 +643,7 @@ module.exports = function (app) {
       privateKeyPath=options["privateKeyPath"]
 
       // Read the public key path
-      publicKeyPath=options["publicKeyPath"]
+      serverPublicKeyPath=options["serverPublicKeyPath"]
 
 
       // create a new logfile
@@ -803,7 +901,7 @@ module.exports = function (app) {
     plugin.unsubscribes = []
   }
 
-  // Reryrb the plugub object
+  // Return the plugin object
   return plugin
 
 }
