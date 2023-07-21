@@ -62,7 +62,7 @@ module.exports = function (app) {
   if (!fs.existsSync(baseKeyFilename + ".pem")) {
 
     // Calling generateKeyPair() method
-// with its parameters
+    // with its parameters
     crypto.generateKeyPair('rsa', {
       modulusLength: 2048,    // options
       publicExponent: 0x10101,
@@ -306,7 +306,7 @@ module.exports = function (app) {
       serverPublicKeyPath: {
         type: 'string',
         title: 'Server public key path.',
-        default: ''
+        default: pluginDir+'/server-public.pem'
       }
     }
   }
@@ -427,7 +427,7 @@ module.exports = function (app) {
 
               // Generate a symmetric key
               const symmetricKey= generatePassword(32)
-              console.log("Symmeric Key:"+symmetricKey)
+              console.log("Symmetric Key:"+symmetricKey)
 
               // Read the destination public key
               let dstPem = fs.readFileSync(serverPublicKeyPath);
@@ -582,7 +582,7 @@ module.exports = function (app) {
     }
 
     // Check if the server public key is available
-    if (options["serverUrl"] !== "" && options["serverPublicKeyPath"] === "") {
+    if (options["serverUrl"] !== "" && !fs.existsSync(options["serverPublicKeyPath"])) {
       // Download the server public key
 
       const url = options["serverUrl"]+"/publickey"
@@ -595,7 +595,6 @@ module.exports = function (app) {
         fileStream.on('finish', () => {
           fileStream.close();
           console.log('Download finished')
-          options["serverPublicKeyPath"] = filename
         });
       })
 
