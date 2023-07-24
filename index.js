@@ -263,16 +263,6 @@ module.exports = function (app) {
         title: 'Server URL',
         default: 'http://localhost:5000'
       },
-      serverUser: {
-        type: 'string',
-        title: 'Server Login',
-        default: ''
-      },
-      serverPass: {
-        type: 'string',
-        title: 'Server Password',
-        default: ''
-      },
       storageDir: {
         type: 'string',
         title: 'Storage directory.',
@@ -348,6 +338,16 @@ module.exports = function (app) {
 
           // Handle the end event
           readStream.on("end", function(){
+
+            // Check if the server public key is valid
+            if (!fs.existsSync(serverPublicKeyPath)) {
+              return
+            }
+
+            // Check if the public key is valid
+            if (!fs.existsSync(publicKeyPath)) {
+              return
+            }
 
             // Sign the data
 
@@ -561,24 +561,35 @@ module.exports = function (app) {
       fs.mkdirSync(options["storageDir"], { recursive: true });
     }
 
-    // Check if the server public key is available
+    // Check if the server url is set
     if (options["serverUrl"] !== "") {
-      if ( !fs.existsSync(serverPublicKeyPath)) {
-        // Download the server public key
 
+      // Download the server public key
+      try {
+        // Set the publickey api url
         const url = options["serverUrl"] + "/publickey"
 
+        // Perfom an http get
         http.get(url, (res) => {
+
+          // Create the destination file stream
           const fileStream = fs.createWriteStream(serverPublicKeyPath);
+
+          // Add the file stream to the resource pipe
           res.pipe(fileStream);
 
+          // When the file stream is finished
           fileStream.on('finish', () => {
+
+            // Close the file stream
             fileStream.close();
-            console.log('Download finished')
           });
         })
+      } catch (e) {
+        console.log(e)
       }
 
+      // Check if the vessel public key is available
       if ( fs.existsSync(publicKeyPath)) {
 
       }
@@ -595,7 +606,7 @@ module.exports = function (app) {
       options["uploadInterval"] !== "" && options["uploadInterval"]>=0 &&
 
       // Check if the serverUrl is not empty
-      options["serverUrl"] !== "" && options["serverUser"] !== "" && options["serverPass"] !== ""
+      options["serverUrl"] !== ""
     ) {
 
       // Read storage directory settings
@@ -644,7 +655,6 @@ module.exports = function (app) {
       // Handle the signalk delta event
       app.signalk.on('delta', (delta) => {
         try {
-          //console.log(delta)
 
           // Write the delta to the current log file
           writeDelta(delta)
@@ -755,6 +765,28 @@ module.exports = function (app) {
 
   /* Register the REST API */
   plugin.registerWithRouter = function(router) {
+
+    // Return the logging speed
+    router.get("/publickey", (req, res) => {
+      app.debug("get public key")
+
+      let result = {
+        "publickey": ""
+      }
+
+      // Check if the vessel public key is available
+      if ( fs.existsSync(publicKeyPath)) {
+
+        // Read the destination public key
+        let publicKey = fs.readFileSync(serverPublicKeyPath).toString('ascii');
+
+        result["publickey"] = publicKey
+
+      }
+      res.status(200)
+
+      res.send(result)
+    })
 
     // Return the logging speed
     router.get("/info", (req, res) => {
