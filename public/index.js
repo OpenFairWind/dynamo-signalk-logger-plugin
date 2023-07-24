@@ -248,3 +248,11 @@ const myChart3 = new Chart(
     document.getElementById('myChart3'),
     config3
 );
+
+$.ajax({
+    url: '/plugins/dynamo-signalk-logger-plugin/publickey',
+    dataType: 'json',
+    success: function(data){
+        $('#publickey').append('<code>' + data.publickey + '</code>');
+    }
+});
