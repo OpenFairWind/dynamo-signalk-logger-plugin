@@ -45,8 +45,6 @@ module.exports = function (app) {
     unsubscribes: []
   }
 
-
-
   // check the available memory
   const pluginDir = os.homedir() + "/.signalk/plugin-config-data/"+plugin.id;
 
@@ -56,10 +54,53 @@ module.exports = function (app) {
     fs.mkdirSync(pluginDir, { recursive: true });
   }
 
-  const baseKeyFilename = pluginDir + "/vessels." + app.selfId
+  // Upload status
+  let uploadStatus = "undefined"
 
-  // Check if the privateKeyFilename exists
-  if (!fs.existsSync(baseKeyFilename + ".pem")) {
+  // Signal K self identifier
+  let selfId = app.selfId
+
+  // The server url
+  let serverUrl = ""
+
+  // Directory for logging (where the plugin stores the updates)
+  let logDir = pluginDir+"/log/"
+
+  // Directory for storage (where the plugin stores locally the log files)
+  let storageDir = ""
+
+  // Directory for files waiting for upload
+  let uploadDir = pluginDir+"/upload/"
+
+  // The name of the log file
+  let logFileName = "data_log.json"
+
+  // The log file is cut each seconds
+  let logRotationInterval = 300
+
+  // The plugin trys to upload each seconds
+  let uploadInterval = 60
+
+  // Private key path
+  let privateKeyPath=pluginDir+"/"+selfId+".pem"
+
+  // Public key path
+  let publicKeyPath=pluginDir+"/"+selfId+"-public.pem"
+
+  // Public key path
+  let serverPublicKeyPath=pluginDir+"/serverPublicKey.pem"
+
+  // Number of concurrently uploading threads
+  let threads = 1
+
+  // Latest speed in byte per second
+  let latestSpeed = 0
+
+  // Latest time of speed measurement
+  let latestTime
+
+  // Check if the privateKeyPath exists
+  if (!fs.existsSync(privateKeyPath)) {
 
     // Calling generateKeyPair() method
     // with its parameters
@@ -78,15 +119,15 @@ module.exports = function (app) {
       if(!err)
       {
         // Write the private key
-        fs.writeFileSync(baseKeyFilename + ".pem", privateKey);
+        fs.writeFileSync(privateKeyPath, privateKey);
 
         // Write the public key
-        fs.writeFileSync(baseKeyFilename + "-public.pem", publicKey);
+        fs.writeFileSync(publicKeyPath, publicKey);
       }
       else
       {
         // Prints error
-        console.log("Errr is: ", err);
+        console.log("Error: ", err);
       }
 
     });
@@ -161,57 +202,16 @@ module.exports = function (app) {
       console.log(msg)
     })
 
-
-
-  // Upload status
-  let uploadStatus = "undefined"
-
-  // Signal K self identifier
-  let selfId = ""
-
-  // The server url
-  let serverUrl = ""
-
-  // Directory for logging (where the plugin stores the updates)
-  let logDir = ""
-
-  // Directory for storage (where the plugin stores locally the log files)
-  let storageDir = ""
-
-  // Directory for files waiting for upload
-  let uploadDir = ""
-
-  // The name of the log file
-  let logFileName = "data_log.json"
-
-  // The log file is cut each seconds
-  let logRotationInterval = 300
-
-  // The plugin trys to upload each seconds
-  let uploadInterval = 60
-
-  // Private key path
-  let privateKeyPath=""
-
-  // Public key path
-  let serverPublicKeyPath=""
-
-  // Number of concurrently uploading threads
-  let threads = 1
-
-  // Latest speed in byte per second
-  let latestSpeed = 0
-
-  // Latest time of speed measurement
-  let latestTime
-
   // Get the file size in bytes
   function getFilesizeInBytes(filename) {
     const stats = fs.statSync(filename)
     return stats.size
   }
 
+  // The circular buffer
   let uploadSpeedBuffer = new CircularBuffer(100);
+
+  // Fill the circular buffer with 100 empty items
   for (let i=0; i<100; i++) {
     uploadSpeedBuffer.push({"size": 0, "start": 0, "stop": 0, "threads": 0, "speed": 0})
   }
@@ -263,7 +263,7 @@ module.exports = function (app) {
         title: 'Server URL',
         default: 'http://localhost:5000'
       },
-      serverLogin: {
+      serverUser: {
         type: 'string',
         title: 'Server Login',
         default: ''
@@ -273,20 +273,10 @@ module.exports = function (app) {
         title: 'Server Password',
         default: ''
       },
-      logDir: {
-        type: 'string',
-        title: 'Data log file directory',
-        default: pluginDir+"/log"
-      },
       storageDir: {
         type: 'string',
         title: 'Storage directory.',
         default: pluginDir+"/storage"
-      },
-      uploadDir: {
-        type: 'string',
-        title: 'Upload directory',
-        default: pluginDir+"/upload"
       },
       interval: {
         type: 'number',
@@ -297,16 +287,6 @@ module.exports = function (app) {
         type: 'number',
         title: 'Upload interval (in seconds). Value of zero disables upload.',
         default: 60
-      },
-      privateKeyPath: {
-        type: 'string',
-        title: 'Private key path (this device).',
-        default: baseKeyFilename + ".pem"
-      },
-      serverPublicKeyPath: {
-        type: 'string',
-        title: 'Server public key path.',
-        default: pluginDir+'/server-public.pem'
       }
     }
   }
@@ -567,8 +547,13 @@ module.exports = function (app) {
   plugin.start = function (options) {
 
     // Check if the logDir is defined, but the directory doesn't exist
-    if (options["logDir"] !== "" && !fs.existsSync(options["logDir"])) {
-      fs.mkdirSync(options["logDir"], { recursive: true });
+    if (!fs.existsSync(options["logDir"])) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+
+    // Check if the logDir is defined, but the directory doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
     }
 
     // Check if the logDir is defined, but the directory doesn't exist
@@ -576,39 +561,32 @@ module.exports = function (app) {
       fs.mkdirSync(options["storageDir"], { recursive: true });
     }
 
-    // Check if the logDir is defined, but the directory doesn't exist
-    if (options["uploadDir"] !== "" && !fs.existsSync(options["uploadDir"])) {
-      fs.mkdirSync(options["uploadDir"], { recursive: true });
-    }
-
     // Check if the server public key is available
-    if (options["serverUrl"] !== "" && !fs.existsSync(options["serverPublicKeyPath"])) {
-      // Download the server public key
+    if (options["serverUrl"] !== "") {
+      if ( !fs.existsSync(serverPublicKeyPath)) {
+        // Download the server public key
 
-      const url = options["serverUrl"]+"/publickey"
-      const filename = pluginDir + "/server-public.pem";
+        const url = options["serverUrl"] + "/publickey"
 
-      http.get(url, (res) => {
-        const fileStream = fs.createWriteStream(filename);
-        res.pipe(fileStream);
+        http.get(url, (res) => {
+          const fileStream = fs.createWriteStream(serverPublicKeyPath);
+          res.pipe(fileStream);
 
-        fileStream.on('finish', () => {
-          fileStream.close();
-          console.log('Download finished')
-        });
-      })
+          fileStream.on('finish', () => {
+            fileStream.close();
+            console.log('Download finished')
+          });
+        })
+      }
 
+      if ( fs.existsSync(publicKeyPath)) {
+
+      }
     }
 
     if (
-      // Check if the logDir is not empty and exists on the file system
-      options["logDir"] !== "" && fs.existsSync(options["logDir"]) &&
-
       // Check if the storageDir is not empty and exists on the file system
       options["storageDir"] !== "" && fs.existsSync(options["storageDir"]) &&
-
-      // Check if the uploadDir is not empty and exists on the file system
-      options["uploadDir"] !== "" && fs.existsSync(options["uploadDir"]) &&
 
       // Check if the interval is not empty and if it is greater than zero
       options["interval"] !== "" && options["interval"]>0 &&
@@ -617,17 +595,11 @@ module.exports = function (app) {
       options["uploadInterval"] !== "" && options["uploadInterval"]>=0 &&
 
       // Check if the serverUrl is not empty
-      options["serverUrl"] !== ""
-
+      options["serverUrl"] !== "" && options["serverUser"] !== "" && options["serverPass"] !== ""
     ) {
 
-      // Save the Signal K self identifier
-      selfId=app.selfId
-
-      // Read directory settings
-      logDir = options["logDir"]
+      // Read storage directory settings
       storageDir = options["storageDir"]
-      uploadDir = options["uploadDir"]
 
       // Read interval settings
       logRotationInterval = options["interval"]
@@ -637,13 +609,6 @@ module.exports = function (app) {
 
       // Read the upload URL
       serverUrl=options["serverUrl"]
-
-      // Read the private key path
-      privateKeyPath=options["privateKeyPath"]
-
-      // Read the public key path
-      serverPublicKeyPath=options["serverPublicKeyPath"]
-
 
       // create a new logfile
       rotateLogFile(new Date())
